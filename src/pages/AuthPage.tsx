@@ -21,7 +21,7 @@ export default function AuthPage() {
 
     try {
       if (tab === 'register') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { username: username.toLowerCase().trim() } },
@@ -29,6 +29,13 @@ export default function AuthPage() {
         if (error) {
           setError(error.message.includes('already registered') ? 'Username already taken.' : error.message)
           return
+        }
+        // Create profile manually as a fallback (in case trigger fails)
+        if (data.user) {
+          await supabase.from('profiles').upsert(
+            { id: data.user.id, username: username.toLowerCase().trim() },
+            { onConflict: 'id' }
+          )
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })

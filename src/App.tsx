@@ -10,6 +10,7 @@ import HistoryPage from './pages/HistoryPage'
 import ProgressPage from './pages/ProgressPage'
 import NutritionPage from './pages/NutritionPage'
 import WeightPage from './pages/WeightPage'
+import GuidePage from './pages/GuidePage'
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/progress" element={<ProgressPage />} />
             <Route path="/nutrition" element={<NutritionPage />} />
             <Route path="/weight" element={<WeightPage />} />
+            <Route path="/guide" element={<GuidePage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

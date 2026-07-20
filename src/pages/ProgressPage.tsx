@@ -9,6 +9,14 @@ import {
 interface ChartPoint {
   date: string; rawDate: string
   totalReps: number; totalVolume: number; totalSets: number; maxWeight: number
+  sessionExerciseId: string; sessionId: string
+}
+
+interface FullSet {
+  id: string; set_number: number
+  reps: number | null; weight: number | null
+  time_elapsed_seconds: number | null; rest_before_seconds: number
+  remarks: string | null
 }
 
 type ChartMode = 'reps' | 'volume' | 'weight'
@@ -26,6 +34,9 @@ export default function ProgressPage() {
   const [mode, setMode] = useState<ChartMode>('reps')
   const [chartType, setChartType] = useState<'line' | 'bar'>('line')
   const [loading, setLoading] = useState(false)
+  const [modalPoint, setModalPoint] = useState<ChartPoint | null>(null)
+  const [modalSets, setModalSets] = useState<FullSet[]>([])
+  const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -78,6 +89,8 @@ export default function ProgressPage() {
             totalVolume: Math.round(sets.reduce((s, set) => s + (set.reps ?? 0) * (set.weight ?? 0), 0) * 10) / 10,
             totalSets: sets.length,
             maxWeight: sets.reduce((m, set) => Math.max(m, set.weight ?? 0), 0),
+            sessionExerciseId: se.id,
+            sessionId: se.session_id,
           }
         })
         .sort((a, b) => a.rawDate.localeCompare(b.rawDate))
@@ -90,6 +103,20 @@ export default function ProgressPage() {
 
   const selectedExercise = exercises.find(e => e.id === selectedId)
   const c = cfg[mode]
+
+  const openModal = async (point: ChartPoint) => {
+    setModalPoint(point)
+    setModalSets([])
+    setModalLoading(true)
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('exercise_sets')
+      .select('id, set_number, reps, weight, time_elapsed_seconds, rest_before_seconds, remarks')
+      .eq('session_exercise_id', point.sessionExerciseId)
+      .order('set_number')
+    setModalSets((data ?? []) as FullSet[])
+    setModalLoading(false)
+  }
 
   const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: {value: number}[]; label?: string }) => {
     if (!active || !payload?.length) return null
@@ -188,13 +215,16 @@ export default function ProgressPage() {
 
       {selectedId && chartData.length > 0 && (
         <div className="card overflow-hidden">
-          <div className="p-4 border-b border-gray-800"><h3 className="font-semibold text-white">Session Details</h3></div>
+          <div className="p-4 border-b border-gray-800">
+            <h3 className="font-semibold text-white">Session Details</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Click any row to see full set details</p>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
-                  {['Date', 'Sets', 'Total Reps', 'Volume (kg)', 'Max Weight'].map(h => (
-                    <th key={h} className={`px-4 py-3 text-gray-400 font-medium ${h === 'Date' ? 'text-left' : 'text-right'}`}>{h}</th>
+                  {['Date', 'Sets', 'Total Reps', 'Volume (kg)', 'Max Weight', ''].map((h, i) => (
+                    <th key={i} className={`px-4 py-3 text-gray-400 font-medium ${h === 'Date' || h === '' ? 'text-left' : 'text-right'}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -204,7 +234,9 @@ export default function ProgressPage() {
                   const rd = prev ? point.totalReps - prev.totalReps : null
                   const vd = prev ? point.totalVolume - prev.totalVolume : null
                   return (
-                    <tr key={point.rawDate} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/50 transition-colors">
+                    <tr key={point.sessionExerciseId}
+                      onClick={() => openModal(point)}
+                      className="border-b border-gray-800 last:border-0 hover:bg-gray-800/60 transition-colors cursor-pointer">
                       <td className="px-4 py-3 text-gray-200">{point.date}</td>
                       <td className="px-4 py-3 text-right text-gray-300">{point.totalSets}</td>
                       <td className="px-4 py-3 text-right">
@@ -216,11 +248,96 @@ export default function ProgressPage() {
                         {vd !== null && vd !== 0 && <span className={`ml-1.5 text-xs ${vd > 0 ? 'text-green-400' : 'text-red-400'}`}>{vd > 0 ? '+' : ''}{Math.round(vd * 10) / 10}</span>}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-300">{point.maxWeight > 0 ? `${point.maxWeight} kg` : '—'}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Session set detail modal */}
+      {modalPoint && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-lg flex flex-col max-h-[80vh]">
+            {/* Modal header */}
+            <div className="p-5 border-b border-gray-800 flex items-start justify-between">
+              <div>
+                <h2 className="font-semibold text-white text-lg">{selectedExercise?.name}</h2>
+                <p className="text-gray-400 text-sm mt-0.5">{modalPoint.date} &mdash; {modalPoint.totalSets} sets</p>
+              </div>
+              <button onClick={() => setModalPoint(null)} className="text-gray-400 hover:text-white p-1 ml-4 flex-shrink-0">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Summary strip */}
+            <div className="grid grid-cols-3 divide-x divide-gray-800 border-b border-gray-800">
+              <div className="p-3 text-center">
+                <p className="text-lg font-bold text-white">{modalPoint.totalReps}</p>
+                <p className="text-xs text-gray-500">Total Reps</p>
+              </div>
+              <div className="p-3 text-center">
+                <p className="text-lg font-bold text-white">{modalPoint.totalVolume} kg</p>
+                <p className="text-xs text-gray-500">Volume</p>
+              </div>
+              <div className="p-3 text-center">
+                <p className="text-lg font-bold text-white">{modalPoint.maxWeight > 0 ? `${modalPoint.maxWeight} kg` : '—'}</p>
+                <p className="text-xs text-gray-500">Max Weight</p>
+              </div>
+            </div>
+
+            {/* Sets table */}
+            <div className="overflow-y-auto flex-1">
+              {modalLoading ? (
+                <div className="p-8 text-center text-gray-400">Loading sets...</div>
+              ) : modalSets.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">No sets recorded for this session.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-900">
+                    <tr className="border-b border-gray-800">
+                      <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-medium">#</th>
+                      <th className="px-4 py-2.5 text-right text-xs text-gray-500 font-medium">Rest Before</th>
+                      <th className="px-4 py-2.5 text-right text-xs text-gray-500 font-medium">Reps</th>
+                      <th className="px-4 py-2.5 text-right text-xs text-gray-500 font-medium">Weight</th>
+                      <th className="px-4 py-2.5 text-right text-xs text-gray-500 font-medium">Set Time</th>
+                      <th className="px-4 py-2.5 text-left text-xs text-gray-500 font-medium">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modalSets.map(set => (
+                      <tr key={set.id} className="border-b border-gray-800 last:border-0">
+                        <td className="px-4 py-3 text-gray-400 font-medium">{set.set_number}</td>
+                        <td className="px-4 py-3 text-right text-gray-300">
+                          {set.rest_before_seconds > 0 ? `${set.rest_before_seconds}s` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-white">
+                          {set.reps ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-white">
+                          {set.weight != null ? `${set.weight} kg` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-300">
+                          {set.time_elapsed_seconds != null ? `${set.time_elapsed_seconds}s` : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 max-w-[120px] truncate">
+                          {set.remarks || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       )}

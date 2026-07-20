@@ -46,31 +46,42 @@ export default function ProgressPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data } = await supabase
+      // Step 1: get all completed session IDs for this user (reliable filter on own table)
+      const { data: sessions } = await supabase
+        .from('workout_sessions')
+        .select('id, date')
+        .eq('user_id', user.id)
+        .not('end_time', 'is', null)
+        .order('date', { ascending: true })
+
+      if (!sessions?.length) { setChartData([]); setLoading(false); return }
+
+      const sessionIds = sessions.map(s => s.id)
+      const dateBySession: Record<string, string> = Object.fromEntries(sessions.map(s => [s.id, s.date]))
+
+      // Step 2: get session_exercises for this exercise in those sessions
+      const { data: seData } = await supabase
         .from('session_exercises')
-        .select('id, exercise_id, sets:exercise_sets(reps, weight), workout_sessions!inner(id, date, end_time, user_id)')
+        .select('id, session_id, exercise_id, sets:exercise_sets(reps, weight)')
         .eq('exercise_id', selectedId)
-        .eq('workout_sessions.user_id', user.id)
-        .not('workout_sessions.end_time', 'is', null)
-        .order('workout_sessions.date', { ascending: true })
+        .in('session_id', sessionIds)
 
-      type RawSE = {
-        id: string; exercise_id: string
-        sets: { reps: number | null; weight: number | null }[]
-        workout_sessions: { id: string; date: string; end_time: string | null; user_id: string }
-      }
+      const points: ChartPoint[] = (seData ?? [])
+        .filter(se => dateBySession[se.session_id])
+        .map(se => {
+          const sets = (se.sets ?? []) as { reps: number | null; weight: number | null }[]
+          const date = dateBySession[se.session_id]
+          return {
+            rawDate: date,
+            date: new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            totalReps: sets.reduce((s, set) => s + (set.reps ?? 0), 0),
+            totalVolume: Math.round(sets.reduce((s, set) => s + (set.reps ?? 0) * (set.weight ?? 0), 0) * 10) / 10,
+            totalSets: sets.length,
+            maxWeight: sets.reduce((m, set) => Math.max(m, set.weight ?? 0), 0),
+          }
+        })
+        .sort((a, b) => a.rawDate.localeCompare(b.rawDate))
 
-      const points: ChartPoint[] = ((data ?? []) as unknown as RawSE[]).map(se => {
-        const sets = se.sets ?? []
-        return {
-          rawDate: se.workout_sessions.date,
-          date: new Date(se.workout_sessions.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          totalReps: sets.reduce((s, set) => s + (set.reps ?? 0), 0),
-          totalVolume: Math.round(sets.reduce((s, set) => s + (set.reps ?? 0) * (set.weight ?? 0), 0) * 10) / 10,
-          totalSets: sets.length,
-          maxWeight: sets.reduce((m, set) => Math.max(m, set.weight ?? 0), 0),
-        }
-      })
       setChartData(points)
       setLoading(false)
     }

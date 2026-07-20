@@ -99,7 +99,7 @@ export default function Navbar({ username }: { username: string }) {
               </svg>
             </div>
             <div>
-              <p className="font-bold text-white leading-none">ProgressLift</p>
+              <p className="font-bold text-white leading-none">fiTrack</p>
               {username && <p className="text-xs text-gray-400 mt-0.5">@{username}</p>}
             </div>
           </div>

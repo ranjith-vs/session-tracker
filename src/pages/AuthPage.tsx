@@ -10,7 +10,7 @@ export default function AuthPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const emailFromUsername = (u: string) => `${u.toLowerCase().trim()}@progresslift.app`
+  const emailFromUsername = (u: string) => `${u.toLowerCase().trim()}@fitrack.app`
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,8 +56,8 @@ export default function AuthPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-white">ProgressLift</h1>
-          <p className="text-gray-400 mt-1">Track your progressive overload</p>
+          <h1 className="text-3xl font-bold text-white">fiTrack</h1>
+          <p className="text-gray-400 mt-1">Track your fitness journey</p>
         </div>
 
         <div className="card p-6">

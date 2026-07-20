@@ -47,6 +47,41 @@ export interface ExerciseSet {
   created_at: string
 }
 
+export interface Food {
+  id: string
+  user_id: string
+  name: string
+  calories_per_100g: number
+  carbs_per_100g: number | null
+  protein_per_100g: number | null
+  fat_per_100g: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FoodLog {
+  id: string
+  user_id: string
+  food_id: string
+  date: string
+  grams: number
+  calories: number
+  carbs: number | null
+  protein: number | null
+  fat: number | null
+  created_at: string
+  food?: Food
+}
+
+export interface WeightLog {
+  id: string
+  user_id: string
+  date: string
+  weight: number
+  notes: string | null
+  created_at: string
+}
+
 export interface WorkoutSessionWithDetails extends WorkoutSession {
   session_exercises: (SessionExercise & {
     exercise: Exercise

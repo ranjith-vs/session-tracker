@@ -55,6 +55,7 @@ export interface Food {
   carbs_per_100g: number | null
   protein_per_100g: number | null
   fat_per_100g: number | null
+  is_fixed_serving: boolean
   created_at: string
   updated_at: string
 }

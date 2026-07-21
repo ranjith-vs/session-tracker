@@ -277,6 +277,7 @@ export default function WorkoutDetailPage() {
   const [prevSetsMap, setPrevSetsMap] = useState<Record<string, ExerciseSet[]>>({})
   const [loading, setLoading] = useState(true)
   const [timer, setTimer] = useState(0)
+  const [bodyWeight, setBodyWeight] = useState<number | null>(null)
   const [showExerciseSelector, setShowExerciseSelector] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [endingWorkout, setEndingWorkout] = useState(false)
@@ -341,6 +342,18 @@ export default function WorkoutDetailPage() {
 
     if (sess?.end_time && sorted.length > 0) {
       loadPrevData(sess.date, sorted, user.id)
+    }
+
+    if (sess?.end_time) {
+      const { data: wLog } = await supabase
+        .from('weight_logs')
+        .select('weight')
+        .eq('user_id', user.id)
+        .lte('date', sess.date)
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (wLog) setBodyWeight(Number(wLog.weight))
     }
   }, [sessionId, supabase, loadPrevData])
 
@@ -470,7 +483,7 @@ export default function WorkoutDetailPage() {
         </div>
 
         {!isEditable && sessionExercises.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-800">
+          <div className={`grid gap-3 mt-4 pt-4 border-t border-gray-800 ${bodyWeight && session.total_duration_seconds ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <div className="text-center">
               <p className="text-xl font-bold text-white">{sessionExercises.length}</p>
               <p className="text-xs text-gray-400">Exercises</p>
@@ -485,7 +498,18 @@ export default function WorkoutDetailPage() {
               </p>
               <p className="text-xs text-gray-400">kg Volume</p>
             </div>
+            {bodyWeight && session.total_duration_seconds && (
+              <div className="text-center">
+                <p className="text-xl font-bold text-orange-400">
+                  ~{Math.round(4.5 * bodyWeight * (session.total_duration_seconds / 3600))}
+                </p>
+                <p className="text-xs text-gray-400">kcal burned*</p>
+              </div>
+            )}
           </div>
+        )}
+        {!isEditable && bodyWeight && session.total_duration_seconds && (
+          <p className="text-xs text-gray-600 mt-2">* Estimated based on {bodyWeight}kg body weight · moderate weight training (MET 4.5)</p>
         )}
       </div>
 

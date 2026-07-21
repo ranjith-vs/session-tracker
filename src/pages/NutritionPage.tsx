@@ -36,6 +36,7 @@ function FoodFormModal({ food, onClose, onSave }: {
   const [carbs, setCarbs] = useState(food?.carbs_per_100g?.toString() ?? '')
   const [protein, setProtein] = useState(food?.protein_per_100g?.toString() ?? '')
   const [fat, setFat] = useState(food?.fat_per_100g?.toString() ?? '')
+  const [isFixed, setIsFixed] = useState(food?.is_fixed_serving ?? false)
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,6 +53,7 @@ function FoodFormModal({ food, onClose, onSave }: {
       carbs_per_100g: carbs ? Number(carbs) : null,
       protein_per_100g: protein ? Number(protein) : null,
       fat_per_100g: fat ? Number(fat) : null,
+      is_fixed_serving: isFixed,
       updated_at: new Date().toISOString(),
     }
 
@@ -68,30 +70,53 @@ function FoodFormModal({ food, onClose, onSave }: {
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="card w-full max-w-md p-6">
         <h2 className="text-lg font-semibold text-white mb-4">{food ? 'Edit Food' : 'Add Food'}</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">Food Name *</label>
             <input type="text" className="input" placeholder="e.g. Chicken Breast"
               value={name} onChange={e => setName(e.target.value)} required autoFocus />
           </div>
+
+          {/* Serving type toggle */}
           <div>
-            <label className="label">Calories per 100g *</label>
-            <input type="number" className="input" placeholder="e.g. 165"
+            <label className="label">Nutrition type</label>
+            <div className="flex bg-gray-800 rounded-lg p-1">
+              <button type="button"
+                onClick={() => setIsFixed(false)}
+                className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${!isFixed ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+                Per 100g
+              </button>
+              <button type="button"
+                onClick={() => setIsFixed(true)}
+                className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${isFixed ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+                Fixed serving
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              {isFixed
+                ? 'Enter total nutrition for one serving. No gram calculation when logging.'
+                : 'Enter nutrition per 100g. You will enter grams when logging.'}
+            </p>
+          </div>
+
+          <div>
+            <label className="label">{isFixed ? 'Total Calories *' : 'Calories per 100g *'}</label>
+            <input type="number" className="input" placeholder={isFixed ? 'e.g. 350' : 'e.g. 165'}
               value={calories} onChange={e => setCalories(e.target.value)} required min="0" step="0.1" />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="label">Carbs /100g</label>
+              <label className="label">{isFixed ? 'Total Carbs' : 'Carbs /100g'}</label>
               <input type="number" className="input" placeholder="g"
                 value={carbs} onChange={e => setCarbs(e.target.value)} min="0" step="0.1" />
             </div>
             <div>
-              <label className="label">Protein /100g</label>
+              <label className="label">{isFixed ? 'Total Protein' : 'Protein /100g'}</label>
               <input type="number" className="input" placeholder="g"
                 value={protein} onChange={e => setProtein(e.target.value)} min="0" step="0.1" />
             </div>
             <div>
-              <label className="label">Fat /100g</label>
+              <label className="label">{isFixed ? 'Total Fat' : 'Fat /100g'}</label>
               <input type="number" className="input" placeholder="g"
                 value={fat} onChange={e => setFat(e.target.value)} min="0" step="0.1" />
             </div>
@@ -124,32 +149,46 @@ function LogFoodModal({ foods, date, onClose, onLogged }: {
 
   const filtered = foods.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
 
-  const preview = selected && grams
-    ? {
-        calories: round1((Number(grams) / 100) * selected.calories_per_100g),
-        carbs: calc(Number(grams), selected.carbs_per_100g),
-        protein: calc(Number(grams), selected.protein_per_100g),
-        fat: calc(Number(grams), selected.fat_per_100g),
-      }
+  const isFixed = selected?.is_fixed_serving ?? false
+
+  // For fixed serving: values are totals stored as-is (grams = 100 internally)
+  const preview = selected
+    ? isFixed
+      ? {
+          calories: selected.calories_per_100g,
+          carbs: selected.carbs_per_100g,
+          protein: selected.protein_per_100g,
+          fat: selected.fat_per_100g,
+        }
+      : grams
+        ? {
+            calories: round1((Number(grams) / 100) * selected.calories_per_100g),
+            carbs: calc(Number(grams), selected.carbs_per_100g),
+            protein: calc(Number(grams), selected.protein_per_100g),
+            fat: calc(Number(grams), selected.fat_per_100g),
+          }
+        : null
     : null
 
+  const canLog = selected && (isFixed || !!grams)
+
   const handleLog = async () => {
-    if (!selected || !grams) return
+    if (!selected) return
     setSaving(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setSaving(false); return }
 
-    const g = Number(grams)
+    const g = isFixed ? 100 : Number(grams)
     await supabase.from('food_logs').insert({
       user_id: user.id,
       food_id: selected.id,
       date,
       grams: g,
-      calories: round1((g / 100) * selected.calories_per_100g),
-      carbs: calc(g, selected.carbs_per_100g),
-      protein: calc(g, selected.protein_per_100g),
-      fat: calc(g, selected.fat_per_100g),
+      calories: isFixed ? selected.calories_per_100g : round1((g / 100) * selected.calories_per_100g),
+      carbs: isFixed ? selected.carbs_per_100g : calc(g, selected.carbs_per_100g),
+      protein: isFixed ? selected.protein_per_100g : calc(g, selected.protein_per_100g),
+      fat: isFixed ? selected.fat_per_100g : calc(g, selected.fat_per_100g),
     })
     setSaving(false)
     onLogged()
@@ -179,9 +218,14 @@ function LogFoodModal({ foods, date, onClose, onLogged }: {
                 : filtered.map(f => (
                   <button key={f.id} onClick={() => setSelected(f)}
                     className="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-800 transition-colors mb-1">
-                    <p className="font-medium text-gray-200">{f.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-200">{f.name}</p>
+                      {f.is_fixed_serving && (
+                        <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded">fixed</span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {f.calories_per_100g} kcal / 100g
+                      {f.calories_per_100g} kcal{f.is_fixed_serving ? ' / serving' : ' / 100g'}
                       {f.protein_per_100g != null && ` · ${f.protein_per_100g}g protein`}
                       {f.carbs_per_100g != null && ` · ${f.carbs_per_100g}g carbs`}
                       {f.fat_per_100g != null && ` · ${f.fat_per_100g}g fat`}
@@ -199,21 +243,36 @@ function LogFoodModal({ foods, date, onClose, onLogged }: {
                 </svg>
               </button>
               <div>
-                <p className="font-medium text-white">{selected.name}</p>
-                <p className="text-xs text-gray-500">{selected.calories_per_100g} kcal / 100g</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-white">{selected.name}</p>
+                  {isFixed && <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded">fixed serving</span>}
+                </div>
+                <p className="text-xs text-gray-500">
+                  {selected.calories_per_100g} kcal{isFixed ? ' / serving' : ' / 100g'}
+                </p>
               </div>
             </div>
 
-            <div>
-              <label className="label">Grams eaten</label>
-              <input type="number" className="input" placeholder="e.g. 150"
-                value={grams} onChange={e => setGrams(e.target.value)}
-                autoFocus min="1" step="1" />
-            </div>
+            {!isFixed && (
+              <div>
+                <label className="label">Grams eaten</label>
+                <input type="number" className="input" placeholder="e.g. 150"
+                  value={grams} onChange={e => setGrams(e.target.value)}
+                  autoFocus min="1" step="1" />
+              </div>
+            )}
+
+            {isFixed && (
+              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 text-sm text-indigo-300">
+                This is a fixed serving — logging one serving directly.
+              </div>
+            )}
 
             {preview && (
               <div className="bg-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wider">Calculated Macros</p>
+                <p className="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wider">
+                  {isFixed ? 'Per serving' : 'Calculated Macros'}
+                </p>
                 <div className="grid grid-cols-4 gap-2 text-center">
                   <div>
                     <p className="text-xl font-bold text-white">{preview.calories}</p>
@@ -237,7 +296,7 @@ function LogFoodModal({ foods, date, onClose, onLogged }: {
 
             <div className="flex gap-3">
               <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={handleLog} disabled={!grams || saving} className="btn-primary flex-1">
+              <button onClick={handleLog} disabled={!canLog || saving} className="btn-primary flex-1">
                 {saving ? 'Logging...' : 'Log Food'}
               </button>
             </div>
@@ -440,9 +499,10 @@ export default function NutritionPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-white">{log.food?.name}</p>
-                      <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
-                        {log.grams}g
-                      </span>
+                      {log.food?.is_fixed_serving
+                        ? <span className="text-xs text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">1 serving</span>
+                        : <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{log.grams}g</span>
+                      }
                     </div>
                     <div className="flex flex-wrap gap-3 mt-1.5 text-xs">
                       <span className="text-white font-medium">{round1(log.calories)} kcal</span>
@@ -488,9 +548,16 @@ export default function NutritionPage() {
               {foods.map(food => (
                 <div key={food.id} className="card p-4 flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white">{food.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-white">{food.name}</p>
+                      {food.is_fixed_serving && (
+                        <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded">fixed serving</span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
-                      <span className="text-white">{food.calories_per_100g} kcal/100g</span>
+                      <span className="text-white">
+                        {food.calories_per_100g} kcal{food.is_fixed_serving ? ' / serving' : ' / 100g'}
+                      </span>
                       {food.carbs_per_100g != null && <span className="text-amber-400">{food.carbs_per_100g}g carbs</span>}
                       {food.protein_per_100g != null && <span className="text-blue-400">{food.protein_per_100g}g protein</span>}
                       {food.fat_per_100g != null && <span className="text-red-400">{food.fat_per_100g}g fat</span>}
